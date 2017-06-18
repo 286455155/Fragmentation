@@ -244,7 +244,7 @@ public class SupportFragment extends Fragment {
     }
 
     protected void setBackground(View view) {
-        if (view != null && view.getBackground() == null) {
+        if (view.getBackground() == null) {
             int defaultBg = mSupport.getSupportDelegate().getDefaultFragmentBackground();
             if (defaultBg == 0) {
                 int background = getWindowBackground();
@@ -435,8 +435,11 @@ public class SupportFragment extends Fragment {
     /**
      * Add some action when calling start()/startXX()
      */
-    public SupportTransaction transaction() {
-        return new SupportTransaction.SupportTransactionImpl<>(this);
+    public SupportTransaction supportTransaction() {
+        if (mTransactionDelegate == null)
+            throw new RuntimeException(this.getClass().getSimpleName() + " not attach!");
+
+        return new SupportTransaction.SupportTransactionImpl<>(this, mTransactionDelegate, false);
     }
 
     /**
@@ -446,14 +449,11 @@ public class SupportFragment extends Fragment {
      * @param toFragment  目标Fragment
      */
     public void loadRootFragment(int containerId, SupportFragment toFragment) {
-        mTransactionDelegate.loadRootTransaction(getChildFragmentManager(), containerId, toFragment);
+        loadRootFragment(containerId, toFragment, true, false);
     }
 
-    /**
-     * 以replace方式加载根Fragment
-     */
-    public void replaceLoadRootFragment(int containerId, SupportFragment toFragment) {
-        mTransactionDelegate.replaceLoadRootTransaction(getChildFragmentManager(), containerId, toFragment);
+    public void loadRootFragment(int containerId, SupportFragment toFragment, boolean addToBackStack, boolean allowAnimation) {
+        mTransactionDelegate.loadRootTransaction(getChildFragmentManager(), containerId, toFragment, addToBackStack, allowAnimation);
     }
 
     /**
@@ -495,15 +495,18 @@ public class SupportFragment extends Fragment {
      * @param toFragment 目标Fragment
      */
     public void start(SupportFragment toFragment) {
-        start(toFragment, STANDARD);
+//        start(toFragment, STANDARD);
+        replace(toFragment);
     }
 
     public void start(final SupportFragment toFragment, @LaunchMode int launchMode) {
-        mTransactionDelegate.dispatchStartTransaction(getFragmentManager(), this, toFragment, 0, launchMode, TransactionDelegate.TYPE_ADD);
+        replace(toFragment, launchMode);
+//        mTransactionDelegate.dispatchStartTransaction(getFragmentManager(), this, toFragment, 0, launchMode, TransactionDelegate.TYPE_ADD);
     }
 
     public void startForResult(SupportFragment toFragment, int requestCode) {
-        mTransactionDelegate.dispatchStartTransaction(getFragmentManager(), this, toFragment, requestCode, STANDARD, TransactionDelegate.TYPE_ADD_RESULT);
+        replace(toFragment, requestCode);
+//        mTransactionDelegate.dispatchStartTransaction(getFragmentManager(), this, toFragment, requestCode, STANDARD, TransactionDelegate.TYPE_ADD_RESULT);
     }
 
     public void startWithPop(SupportFragment toFragment) {
@@ -543,57 +546,33 @@ public class SupportFragment extends Fragment {
      * @param includeTargetFragment 是否包含该fragment
      */
     public void popTo(Class<?> targetFragmentClass, boolean includeTargetFragment) {
-        popTo(targetFragmentClass.getName(), includeTargetFragment);
-    }
-
-    public void popTo(String targetFragmentTag, boolean includeTargetFragment) {
-        popTo(targetFragmentTag, includeTargetFragment, null);
+        popTo(targetFragmentClass, includeTargetFragment, null);
     }
 
     /**
      * 用于出栈后,立刻进行FragmentTransaction操作
      */
     public void popTo(Class<?> targetFragmentClass, boolean includeTargetFragment, Runnable afterPopTransactionRunnable) {
-        popTo(targetFragmentClass.getName(), includeTargetFragment, afterPopTransactionRunnable, 0);
-    }
-
-    public void popTo(String targetFragmentTag, boolean includeTargetFragment, Runnable afterPopTransactionRunnable) {
-        popTo(targetFragmentTag, includeTargetFragment, afterPopTransactionRunnable, 0);
+        popTo(targetFragmentClass, includeTargetFragment, afterPopTransactionRunnable, 0);
     }
 
     public void popTo(Class<?> targetFragmentClass, boolean includeTargetFragment, Runnable afterPopTransactionRunnable, int popAnim) {
-        popTo(targetFragmentClass.getName(), includeTargetFragment, afterPopTransactionRunnable, popAnim);
-    }
-
-    public void popTo(String targetFragmentTag, boolean includeTargetFragment, Runnable afterPopTransactionRunnable, int popAnim) {
-        mTransactionDelegate.popTo(targetFragmentTag, includeTargetFragment, afterPopTransactionRunnable, getFragmentManager(), popAnim);
+        mTransactionDelegate.popTo(targetFragmentClass.getName(), includeTargetFragment, afterPopTransactionRunnable, getFragmentManager(), popAnim);
     }
 
     /**
      * 子栈内
      */
     public void popToChild(Class<?> targetFragmentClass, boolean includeTargetFragment) {
-        popToChild(targetFragmentClass.getName(), includeTargetFragment);
-    }
-
-    public void popToChild(String targetFragmentTag, boolean includeTargetFragment) {
-        popToChild(targetFragmentTag, includeTargetFragment, null);
+        popToChild(targetFragmentClass, includeTargetFragment, null);
     }
 
     public void popToChild(Class<?> targetFragmentClass, boolean includeTargetFragment, Runnable afterPopTransactionRunnable) {
-        popToChild(targetFragmentClass.getName(), includeTargetFragment, afterPopTransactionRunnable, 0);
-    }
-
-    public void popToChild(String targetFragmentTag, boolean includeTargetFragment, Runnable afterPopTransactionRunnable) {
-        popToChild(targetFragmentTag, includeTargetFragment, afterPopTransactionRunnable, 0);
+        popToChild(targetFragmentClass, includeTargetFragment, afterPopTransactionRunnable, 0);
     }
 
     public void popToChild(Class<?> targetFragmentClass, boolean includeTargetFragment, Runnable afterPopTransactionRunnable, int popAnim) {
-        popToChild(targetFragmentClass.getName(), includeTargetFragment, afterPopTransactionRunnable, popAnim);
-    }
-
-    public void popToChild(String targetFragmentTag, boolean includeTargetFragment, Runnable afterPopTransactionRunnable, int popAnim) {
-        mTransactionDelegate.popTo(targetFragmentTag, includeTargetFragment, afterPopTransactionRunnable, getChildFragmentManager(), popAnim);
+        mTransactionDelegate.popTo(targetFragmentClass.getName(), includeTargetFragment, afterPopTransactionRunnable, getChildFragmentManager(), popAnim);
     }
 
     /**

@@ -2,6 +2,7 @@ package me.yokeyword.fragmentation;
 
 import android.content.Context;
 import android.support.v4.app.Fragment;
+import android.support.v4.app.FragmentationHack;
 import android.support.v4.app.FragmentManager;
 import android.view.View;
 import android.view.inputmethod.InputMethodManager;
@@ -12,19 +13,19 @@ import java.util.List;
  * Created by YoKey on 17/6/13.
  */
 
-public class SupportManager {
+public class SupportHelper {
     private static final long SHOW_SPACE = 200L;
 
-    private static volatile SupportManager INSTANCE;
+    private static volatile SupportHelper INSTANCE;
 
-    private SupportManager() {
+    private SupportHelper() {
     }
 
-    public static SupportManager getInstance() {
+    public static SupportHelper getInstance() {
         if (INSTANCE == null) {
-            synchronized (SupportManager.class) {
+            synchronized (SupportHelper.class) {
                 if (INSTANCE == null) {
-                    INSTANCE = new SupportManager();
+                    INSTANCE = new SupportHelper();
                 }
             }
         }
@@ -73,7 +74,7 @@ public class SupportManager {
      * 获得栈顶SupportFragment
      */
     public SupportFragment getTopFragment(FragmentManager fragmentManager) {
-        List<Fragment> fragmentList = fragmentManager.getFragments();
+        List<Fragment> fragmentList = FragmentationHack.getActiveFragments(fragmentManager);
         if (fragmentList == null) return null;
 
         for (int i = fragmentList.size() - 1; i >= 0; i--) {
@@ -94,7 +95,7 @@ public class SupportManager {
         FragmentManager fragmentManager = fragment.getFragmentManager();
         if (fragmentManager == null) return null;
 
-        List<Fragment> fragmentList = fragmentManager.getFragments();
+        List<Fragment> fragmentList = FragmentationHack.getActiveFragments(fragmentManager);
         if (fragmentList == null) return null;
 
         int index = fragmentList.indexOf(fragment);
@@ -135,7 +136,7 @@ public class SupportManager {
         Fragment fragment = null;
 
         if (toFragmentTag == null) {
-            List<Fragment> fragmentList = fragmentManager.getFragments();
+            List<Fragment> fragmentList = FragmentationHack.getActiveFragments(fragmentManager);
             if (fragmentList == null) return null;
 
             int sizeChildFrgList = fragmentList.size();
@@ -155,7 +156,7 @@ public class SupportManager {
     }
 
     private SupportFragment getActiveFragment(FragmentManager fragmentManager, SupportFragment parentFragment) {
-        List<Fragment> fragmentList = fragmentManager.getFragments();
+        List<Fragment> fragmentList = FragmentationHack.getActiveFragments(fragmentManager);
         if (fragmentList == null) {
             return parentFragment;
         }

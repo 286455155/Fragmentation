@@ -20,12 +20,11 @@ public abstract class SupportTransaction {
 
     /**
      * @param tag Optional tag name for the fragment, to later retrieve the
-     *            fragment with {@link SupportManager#findFragment(FragmentManager, String)}
+     *            fragment with {@link SupportHelper#findFragment(FragmentManager, String)}
      *            , SupportFragment.pop(String)
      *            or FragmentManager.findFragmentByTag(String).
-     * @return the same SupportTransaction instance.
      */
-    public abstract SupportTransaction setTag(String tag);
+    public abstract ExtraTransaction setTag(String tag);
 
     /**
      * Used with custom Transitions to map a View from a removed or hidden
@@ -36,62 +35,99 @@ public abstract class SupportTransaction {
      *                      appearing Fragment.
      * @param sharedName    The transitionName for a View in an appearing Fragment to match to the shared
      *                      element.
-     * @return the same SupportTransaction instance.
      * @see Fragment#setSharedElementReturnTransition(Object)
      * @see Fragment#setSharedElementEnterTransition(Object)
      */
     @RequiresApi(Build.VERSION_CODES.LOLLIPOP_MR1)
-    public abstract SupportTransaction addSharedElement(View sharedElement, String sharedName);
+    public abstract ExtraTransaction addSharedElement(View sharedElement, String sharedName);
 
     /**
-     * Add this transaction to the back stack.  This means that the transaction
-     * will be remembered after it is committed, and will reverse its operation
-     * when later popped off the stack.
-     *
-     * @param add default: true
-     * @return the same SupportTransaction instance.
+     * Don't add this supportTransaction to the back stack.
      */
-    public abstract SupportTransaction addToBackStack(boolean add);
+    public abstract DontAddToBackStackTransaction dontAddToBackStack();
 
-    public abstract void loadRootFragment(int container, SupportFragment fragment);
+    /**
+     * 使用dontAddToBackStack() 加载Fragment时， 使用remove()移除Fragment
+     */
+    public abstract void remove(SupportFragment fragment);
 
-    public abstract void replaceLoadRootFragment(int container, SupportFragment fragment);
+    /**
+     * 使用setTag()自定义Tag时，使用下面popTo()／popToChild()出栈
+     *
+     * @param targetFragmentTag     通过setTag()设置的tag
+     * @param includeTargetFragment 是否包含目标(Tag为targetFragmentTag)Fragment
+     */
+    public abstract void popTo(String targetFragmentTag, boolean includeTargetFragment);
 
-    public abstract void start(SupportFragment toFragment);
+    public abstract void popTo(String targetFragmentTag, boolean includeTargetFragment, Runnable afterPopTransactionRunnable, int popAnim);
 
-    public abstract void start(final SupportFragment toFragment, @SupportFragment.LaunchMode int launchMode);
+    public abstract void popToChild(String targetFragmentTag, boolean includeTargetFragment);
 
-    public abstract void startForResult(SupportFragment toFragment, int requestCode);
+    public abstract void popToChild(String targetFragmentTag, boolean includeTargetFragment, Runnable afterPopTransactionRunnable, int popAnim);
 
-    public abstract void startWithPop(SupportFragment toFragment);
+    public interface DontAddToBackStackTransaction {
+        /**
+         * add() +  hide(preFragment)
+         */
+        void start(SupportFragment toFragment);
 
-    public abstract void replace(SupportFragment toFragment);
+        /**
+         * Only add()
+         */
+        void add(SupportFragment toFragment);
 
-    public abstract void replace(SupportFragment toFragment, @SupportFragment.LaunchMode int launchMode);
+        /**
+         * replace()
+         */
+        void replace(SupportFragment toFragment);
+    }
 
-    public abstract void replaceForResult(SupportFragment toFragment, int requestCode);
+    public interface ExtraTransaction {
+        ExtraTransaction setTag(String tag);
+
+        @RequiresApi(Build.VERSION_CODES.LOLLIPOP_MR1)
+        ExtraTransaction addSharedElement(View sharedElement, String sharedName);
+
+        void start(SupportFragment toFragment);
+
+        void start(final SupportFragment toFragment, @SupportFragment.LaunchMode int launchMode);
+
+        void startForResult(SupportFragment toFragment, int requestCode);
+
+        void startWithPop(SupportFragment toFragment);
+
+        void replace(SupportFragment toFragment);
+
+        void replace(SupportFragment toFragment, @SupportFragment.LaunchMode int launchMode);
+
+        void replaceForResult(SupportFragment toFragment, int requestCode);
+    }
 
     /**
      * Add some action when calling {@link SupportFragment#start(SupportFragment)
      * or SupportActivity/SupportFragment.startXXX()}
      */
-    final static class SupportTransactionImpl<T extends SupportFragment> extends SupportTransaction {
+    final static class SupportTransactionImpl<T extends SupportFragment> extends SupportTransaction implements DontAddToBackStackTransaction, ExtraTransaction {
         private T mSupportFragment;
+        private TransactionDelegate mTransactionDelegate;
+        private boolean mFromActivity;
         private TransactionRecord mRecord;
 
-        SupportTransactionImpl(T supportFragment) {
+        SupportTransactionImpl(T supportFragment, TransactionDelegate transactionDelegate, boolean fromActivity) {
             this.mSupportFragment = supportFragment;
+            this.mTransactionDelegate = transactionDelegate;
+            this.mFromActivity = fromActivity;
             mRecord = new TransactionRecord();
         }
 
         @Override
-        public SupportTransaction setTag(String tag) {
+        public ExtraTransaction setTag(String tag) {
             mRecord.tag = tag;
             return this;
         }
 
         @Override
-        public SupportTransaction addSharedElement(View sharedElement, String sharedName) {
+        public ExtraTransaction addSharedElement(View sharedElement, String sharedName) {
             if (mRecord.sharedElementList == null) {
                 mRecord.sharedElementList = new ArrayList<>();
             }
@@ -100,63 +136,84 @@ public abstract class SupportTransaction {
         }
 
         @Override
-        public SupportTransaction addToBackStack(boolean add) {
-            mRecord.addToBackStack = add;
+        public DontAddToBackStackTransaction dontAddToBackStack() {
+            mRecord.dontAddToBackStack = true;
             return this;
         }
 
         @Override
-        public void loadRootFragment(int container, SupportFragment toFragment) {
-            toFragment.setTransactionRecord(mRecord);
-            mSupportFragment.loadRootFragment(container, toFragment);
+        public void remove(SupportFragment fragment) {
+            mTransactionDelegate.remove(mSupportFragment.getFragmentManager(), fragment);
         }
 
         @Override
-        public void replaceLoadRootFragment(int container, SupportFragment toFragment) {
+        public void popTo(String targetFragmentTag, boolean includeTargetFragment) {
+            popTo(targetFragmentTag, includeTargetFragment, null, 0);
+        }
+
+        @Override
+        public void popTo(String targetFragmentTag, boolean includeTargetFragment, Runnable afterPopTransactionRunnable, int popAnim) {
+            mTransactionDelegate.popTo(targetFragmentTag, includeTargetFragment, afterPopTransactionRunnable, mSupportFragment.getFragmentManager(), popAnim);
+        }
+
+        @Override
+        public void popToChild(String targetFragmentTag, boolean includeTargetFragment) {
+            popToChild(targetFragmentTag, includeTargetFragment, null, 0);
+        }
+
+        @Override
+        public void popToChild(String targetFragmentTag, boolean includeTargetFragment, Runnable afterPopTransactionRunnable, int popAnim) {
+            if (mFromActivity) {
+                popTo(targetFragmentTag, includeTargetFragment, afterPopTransactionRunnable, popAnim);
+            } else {
+                mTransactionDelegate.popTo(targetFragmentTag, includeTargetFragment, afterPopTransactionRunnable, mSupportFragment.getChildFragmentManager(), popAnim);
+            }
+        }
+
+        @Override
+        public void add(SupportFragment toFragment) {
             toFragment.setTransactionRecord(mRecord);
-            mSupportFragment.replaceLoadRootFragment(container, toFragment);
+            mTransactionDelegate.dispatchStartTransaction(mSupportFragment.getFragmentManager(), mSupportFragment, toFragment, 0, SupportFragment.STANDARD, TransactionDelegate.TYPE_ADD_WITHOUT_HIDE);
         }
 
         @Override
         public void start(SupportFragment toFragment) {
-            toFragment.setTransactionRecord(mRecord);
-            mSupportFragment.start(toFragment);
+            start(toFragment, SupportFragment.STANDARD);
         }
 
         @Override
         public void start(SupportFragment toFragment, @SupportFragment.LaunchMode int launchMode) {
             toFragment.setTransactionRecord(mRecord);
-            mSupportFragment.start(toFragment, launchMode);
+            mTransactionDelegate.dispatchStartTransaction(mSupportFragment.getFragmentManager(), mSupportFragment, toFragment, 0, launchMode, TransactionDelegate.TYPE_ADD);
         }
 
         @Override
         public void startForResult(SupportFragment toFragment, int requestCode) {
             toFragment.setTransactionRecord(mRecord);
-            mSupportFragment.startForResult(toFragment, requestCode);
+            mTransactionDelegate.dispatchStartTransaction(mSupportFragment.getFragmentManager(), mSupportFragment, toFragment, requestCode, SupportFragment.STANDARD, TransactionDelegate.TYPE_ADD_RESULT);
         }
 
         @Override
         public void startWithPop(SupportFragment toFragment) {
             toFragment.setTransactionRecord(mRecord);
-            mSupportFragment.startWithPop(toFragment);
+            mTransactionDelegate.dispatchStartTransaction(mSupportFragment.getFragmentManager(), mSupportFragment, toFragment, 0, SupportFragment.STANDARD, TransactionDelegate.TYPE_ADD_WITH_POP);
         }
 
         @Override
         public void replace(SupportFragment toFragment) {
-            toFragment.setTransactionRecord(mRecord);
-            mSupportFragment.replace(toFragment);
+            replace(toFragment, SupportFragment.STANDARD);
         }
 
         @Override
         public void replace(SupportFragment toFragment, @SupportFragment.LaunchMode int launchMode) {
             toFragment.setTransactionRecord(mRecord);
-            mSupportFragment.replace(toFragment, launchMode);
+            mTransactionDelegate.dispatchStartTransaction(mSupportFragment.getFragmentManager(), mSupportFragment, toFragment, 0, launchMode, TransactionDelegate.TYPE_REPLACE);
         }
 
         @Override
         public void replaceForResult(SupportFragment toFragment, int requestCode) {
             toFragment.setTransactionRecord(mRecord);
-            mSupportFragment.replaceForResult(toFragment, requestCode);
+            mTransactionDelegate.dispatchStartTransaction(mSupportFragment.getFragmentManager(), mSupportFragment, toFragment, requestCode, SupportFragment.STANDARD, TransactionDelegate.TYPE_REPLACE_RESULT);
         }
     }
 }

@@ -14,6 +14,16 @@ public class SupportActivity extends AppCompatActivity implements ISupportActivi
     final SupportActivityDelegate mDelegate = new SupportActivityDelegate(this);
 
     @Override
+    public SupportActivityDelegate getSupportDelegate() {
+        return mDelegate;
+    }
+
+    @Override
+    public SupportTransaction supportTransaction() {
+        return mDelegate.supportTransaction();
+    }
+
+    @Override
     protected void onPostCreate(@Nullable Bundle savedInstanceState) {
         super.onPostCreate(savedInstanceState);
         mDelegate.onPostCreate(savedInstanceState);
@@ -95,12 +105,8 @@ public class SupportActivity extends AppCompatActivity implements ISupportActivi
         mDelegate.loadRootFragment(containerId, toFragment);
     }
 
-    /**
-     * 以replace方式加载根Fragment
-     */
-    @Override
-    public void replaceLoadRootFragment(int containerId, SupportFragment toFragment) {
-        mDelegate.replaceLoadRootFragment(containerId, toFragment);
+    public void loadRootFragment(int containerId, SupportFragment toFragment, boolean addToBackStack, boolean allowAnimation) {
+        mDelegate.loadRootFragment(containerId, toFragment, addToBackStack, allowAnimation);
     }
 
     /**
@@ -183,11 +189,6 @@ public class SupportActivity extends AppCompatActivity implements ISupportActivi
         mDelegate.popTo(targetFragmentClass, includeTargetFragment);
     }
 
-    @Override
-    public void popTo(String targetFragmentTag, boolean includeTargetFragment) {
-        mDelegate.popTo(targetFragmentTag, includeTargetFragment);
-    }
-
     /**
      * 用于出栈后,立刻进行FragmentTransaction操作
      */
@@ -197,22 +198,7 @@ public class SupportActivity extends AppCompatActivity implements ISupportActivi
     }
 
     @Override
-    public void popTo(String targetFragmentTag, boolean includeTargetFragment, Runnable afterPopTransactionRunnable) {
-        mDelegate.popTo(targetFragmentTag, includeTargetFragment, afterPopTransactionRunnable);
-    }
-
-    @Override
     public void popTo(Class<?> targetFragmentClass, boolean includeTargetFragment, Runnable afterPopTransactionRunnable, int popAnim) {
         mDelegate.popTo(targetFragmentClass, includeTargetFragment, afterPopTransactionRunnable, popAnim);
-    }
-
-    @Override
-    public void popTo(String targetFragmentTag, boolean includeTargetFragment, Runnable afterPopTransactionRunnable, int popAnim) {
-        mDelegate.popTo(targetFragmentTag, includeTargetFragment, afterPopTransactionRunnable, popAnim);
-    }
-
-    @Override
-    public SupportActivityDelegate getSupportDelegate() {
-        return mDelegate;
     }
 }

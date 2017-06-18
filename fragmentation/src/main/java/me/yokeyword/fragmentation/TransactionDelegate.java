@@ -8,8 +8,7 @@ import android.support.v4.app.Fragment;
 import android.support.v4.app.FragmentActivity;
 import android.support.v4.app.FragmentManager;
 import android.support.v4.app.FragmentTransaction;
-import android.support.v4.app.FragmentTransactionBugFixHack;
-import android.support.v7.app.AlertDialog;
+import android.support.v4.app.FragmentationHack;
 import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
@@ -42,6 +41,7 @@ class TransactionDelegate {
     static final int TYPE_ADD = 0;
     static final int TYPE_ADD_WITH_POP = 1;
     static final int TYPE_ADD_RESULT = 2;
+    static final int TYPE_ADD_WITHOUT_HIDE = 3;
     static final int TYPE_REPLACE = 10;
     static final int TYPE_REPLACE_RESULT = 12;
 
@@ -60,23 +60,14 @@ class TransactionDelegate {
     /**
      * 分发load根Fragment事务
      *
-     * @param containerId 容器id
-     * @param to          目标Fragment
+     * @param containerId    容器id
+     * @param to             目标Fragment
+     * @param addToBackStack
+     * @param allowAnimation
      */
-    void loadRootTransaction(FragmentManager fragmentManager, int containerId, SupportFragment to) {
+    void loadRootTransaction(FragmentManager fragmentManager, int containerId, SupportFragment to, boolean addToBackStack, boolean allowAnimation) {
         bindContainerId(containerId, to);
-        dispatchStartTransaction(fragmentManager, null, to, 0, SupportFragment.STANDARD, TYPE_ADD);
-    }
-
-    /**
-     * replace分发load根Fragment事务
-     *
-     * @param containerId 容器id
-     * @param to          目标Fragment
-     */
-    void replaceLoadRootTransaction(FragmentManager fragmentManager, int containerId, SupportFragment to) {
-        bindContainerId(containerId, to);
-        dispatchStartTransaction(fragmentManager, null, to, 0, SupportFragment.STANDARD, TYPE_REPLACE);
+        start(fragmentManager, null, to, to.getClass().getName(), !addToBackStack, null, allowAnimation, TYPE_REPLACE);
     }
 
     /**
@@ -89,6 +80,12 @@ class TransactionDelegate {
         for (int i = 0; i < tos.length; i++) {
             SupportFragment to = tos[i];
 
+            Bundle args = to.getArguments();
+            if (args == null) {
+                args = new Bundle();
+                to.setArguments(args);
+            }
+            args.putBoolean(FRAGMENTATION_ARG_IS_ROOT, true);
             bindContainerId(containerId, tos[i]);
 
             String toName = to.getClass().getName();
@@ -123,18 +120,18 @@ class TransactionDelegate {
 
         // process SupportTransaction
         String toFragmentTag = to.getClass().getName();
-        boolean addToBackStack = true;
+        boolean dontAddToBackStack = false;
         ArrayList<TransactionRecord.SharedElement> sharedElementList = null;
         TransactionRecord transactionRecord = to.getTransactionRecord();
         if (transactionRecord != null) {
             if (transactionRecord.tag != null) {
                 toFragmentTag = transactionRecord.tag;
             }
-            addToBackStack = transactionRecord.addToBackStack;
+            dontAddToBackStack = transactionRecord.dontAddToBackStack;
             if (transactionRecord.sharedElementList != null) {
                 sharedElementList = transactionRecord.sharedElementList;
                 // 这里发现使用addSharedElement时,在被强杀重启时导致栈内顺序异常,这里进行一次hack顺序
-                FragmentTransactionBugFixHack.reorderIndices(fragmentManager);
+                FragmentationHack.reorderIndices(fragmentManager);
             }
         }
 
@@ -144,18 +141,10 @@ class TransactionDelegate {
 
         if (handleLaunchMode(fragmentManager, to, toFragmentTag, launchMode)) return;
 
-        switch (type) {
-            case TYPE_ADD:
-            case TYPE_ADD_RESULT:
-            case TYPE_REPLACE:
-            case TYPE_REPLACE_RESULT:
-                start(fragmentManager, from, to, toFragmentTag, addToBackStack, sharedElementList, type == TYPE_ADD || type == TYPE_ADD_RESULT);
-                break;
-            case TYPE_ADD_WITH_POP:
-                if (from != null) {
-                    startWithPop(fragmentManager, from, to, toFragmentTag);
-                }
-                break;
+        if (type == TYPE_ADD_WITH_POP) {
+            startWithPop(fragmentManager, from, to, toFragmentTag);
+        } else {
+            start(fragmentManager, from, to, toFragmentTag, dontAddToBackStack, sharedElementList, false, type);
         }
     }
 
@@ -183,7 +172,7 @@ class TransactionDelegate {
         FragmentTransaction ft = fragmentManager.beginTransaction().show(showFragment);
 
         if (hideFragment == null) {
-            List<Fragment> fragmentList = fragmentManager.getFragments();
+            List<Fragment> fragmentList = FragmentationHack.getActiveFragments(fragmentManager);
             if (fragmentList != null) {
                 for (Fragment fragment : fragmentList) {
                     if (fragment != null && fragment != showFragment) {
@@ -198,9 +187,9 @@ class TransactionDelegate {
     }
 
     private void start(FragmentManager fragmentManager, final SupportFragment from, SupportFragment to, String toFragmentTag,
-                       boolean addToBackStack, ArrayList<TransactionRecord.SharedElement> sharedElementList, boolean addMode) {
+                       boolean dontAddToBackStack, ArrayList<TransactionRecord.SharedElement> sharedElementList, boolean allowRootFragmentAnim, int type) {
         FragmentTransaction ft = fragmentManager.beginTransaction();
-
+        boolean addMode = (type == TYPE_ADD || type == TYPE_ADD_RESULT || type == TYPE_ADD_WITHOUT_HIDE);
         Bundle bundle = to.getArguments();
 
         if (sharedElementList == null) {
@@ -212,16 +201,14 @@ class TransactionDelegate {
             }
         }
         if (from == null) {
-            if (addMode) {
-                ft.add(bundle.getInt(FRAGMENTATION_ARG_CONTAINER), to, toFragmentTag);
-            } else {
-                ft.replace(bundle.getInt(FRAGMENTATION_ARG_CONTAINER), to, toFragmentTag);
+            ft.replace(bundle.getInt(FRAGMENTATION_ARG_CONTAINER), to, toFragmentTag);
+            if (!allowRootFragmentAnim) {
+                bundle.putBoolean(FRAGMENTATION_ARG_IS_ROOT, true);
             }
-            bundle.putBoolean(FRAGMENTATION_ARG_IS_ROOT, true);
         } else {
             if (addMode) {
                 ft.add(from.getContainerId(), to, toFragmentTag);
-                if (from.getTag() != null) {
+                if (from.getTag() != null && type != TYPE_ADD_WITHOUT_HIDE) {
                     ft.hide(from);
                 }
             } else {
@@ -229,7 +216,7 @@ class TransactionDelegate {
             }
         }
 
-        if (addToBackStack) {
+        if (!dontAddToBackStack) {
             ft.addToBackStack(toFragmentTag);
         }
         supportCommit(fragmentManager, ft);
@@ -238,7 +225,7 @@ class TransactionDelegate {
     private void startWithPop(final FragmentManager fragmentManager, final SupportFragment from, final SupportFragment to, final String toFragmentTag) {
         fragmentManager.executePendingTransactions();
         if (from.isHidden()) {
-            Log.e(TAG, from.getClass().getSimpleName() + " is hidden, " + "the transaction of startWithPop() is invalid!");
+            Log.e(TAG, from.getClass().getSimpleName() + " is hidden, " + "the supportTransaction of startWithPop() is invalid!");
             return;
         }
 
@@ -250,7 +237,7 @@ class TransactionDelegate {
                 mHandler.post(new Runnable() {
                     @Override
                     public void run() {
-                        FragmentTransactionBugFixHack.reorderIndices(fragmentManager);
+                        FragmentationHack.reorderIndices(fragmentManager);
 
                         FragmentTransaction ft = fragmentManager.beginTransaction()
                                 .setTransition(FragmentTransaction.TRANSIT_FRAGMENT_OPEN)
@@ -272,7 +259,7 @@ class TransactionDelegate {
         if (Fragmentation.getDefault().isDebug()) {
             transaction.commit();
         } else {
-            boolean stateSaved = FragmentTransactionBugFixHack.isStateSaved(fragmentManager);
+            boolean stateSaved = FragmentationHack.isStateSaved(fragmentManager);
             if (stateSaved) {
                 // 这里的警告请重视，请在Activity回来后，在onPostResume()中执行该事务
                 Log.e(TAG, "Please beginTransaction in onPostResume() after the Activity returns!");
@@ -287,18 +274,18 @@ class TransactionDelegate {
     }
 
     private SupportFragment getTopFragment(FragmentManager fragmentManager) {
-        return SupportManager.getInstance().getTopFragment(fragmentManager);
+        return SupportHelper.getInstance().getTopFragment(fragmentManager);
     }
 
     private SupportFragment getPreFragment(Fragment fragment) {
-        return SupportManager.getInstance().getPreFragment(fragment);
+        return SupportHelper.getInstance().getPreFragment(fragment);
     }
 
     /**
      * Find Fragment from the bottom of the stack
      */
     private SupportFragment findFragmentByRoot(FragmentManager fragmentManager, String tag) {
-        List<Fragment> fragmentList = fragmentManager.getFragments();
+        List<Fragment> fragmentList = FragmentationHack.getActiveFragments(fragmentManager);
         if (fragmentList != null) {
             for (Fragment fragment : fragmentList) {
                 if (fragment instanceof SupportFragment && tag.equals(fragment.getTag())) {
@@ -334,7 +321,7 @@ class TransactionDelegate {
     private boolean handleLaunchMode(FragmentManager fragmentManager, final SupportFragment toFragment, String toFragmentTag, int launchMode) {
         SupportFragment topFragment = getTopFragment(fragmentManager);
         if (topFragment == null) return false;
-        final Fragment stackToFragment = SupportManager.getInstance().findStackFragment(toFragment.getClass(), toFragmentTag, fragmentManager);
+        final Fragment stackToFragment = SupportHelper.getInstance().findStackFragment(toFragment.getClass(), toFragmentTag, fragmentManager);
         if (stackToFragment == null) return false;
 
         if (launchMode == SupportFragment.SINGLETOP) {
@@ -385,6 +372,33 @@ class TransactionDelegate {
         bundle.putParcelable(FRAGMENTATION_ARG_RESULT_RECORD, resultRecord);
     }
 
+    void handleResultRecord(Fragment from) {
+        final SupportFragment preFragment = getPreFragment(from);
+        if (preFragment == null) return;
+
+        Bundle args = from.getArguments();
+        if (args == null || !args.containsKey(FRAGMENTATION_ARG_RESULT_RECORD)) return;
+
+        final ResultRecord resultRecord = args.getParcelable(FRAGMENTATION_ARG_RESULT_RECORD);
+        if (resultRecord == null) return;
+
+        mHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                preFragment.onFragmentResult(resultRecord.requestCode, resultRecord.resultCode, resultRecord.resultBundle);
+            }
+        });
+    }
+
+    void remove(FragmentManager fm, SupportFragment fragment) {
+        fm.beginTransaction()
+                .setTransition(FragmentTransaction.TRANSIT_FRAGMENT_CLOSE)
+                .remove(fragment)
+                .show(SupportHelper.getInstance().getPreFragment(fragment))
+                .commit();
+    }
+
+
     void back(FragmentManager fm) {
         fm = checkFragmentManager(fm, null);
         if (fm == null) return;
@@ -410,24 +424,6 @@ class TransactionDelegate {
         }
 
         fm.popBackStackImmediate();
-    }
-
-    void handleResultRecord(Fragment from) {
-        final SupportFragment preFragment = getPreFragment(from);
-        if (preFragment == null) return;
-
-        Bundle args = from.getArguments();
-        if (args == null || !args.containsKey(FRAGMENTATION_ARG_RESULT_RECORD)) return;
-
-        final ResultRecord resultRecord = args.getParcelable(FRAGMENTATION_ARG_RESULT_RECORD);
-        if (resultRecord == null) return;
-
-        mHandler.post(new Runnable() {
-            @Override
-            public void run() {
-                preFragment.onFragmentResult(resultRecord.requestCode, resultRecord.resultCode, resultRecord.resultBundle);
-            }
-        });
     }
 
     /**
@@ -499,7 +495,7 @@ class TransactionDelegate {
      * 解决popTo多个fragment时动画引起的异常问题
      */
     private void popToFix(String fragmentTag, int flag, final FragmentManager fragmentManager) {
-        if (fragmentManager.getFragments() == null) return;
+        if (FragmentationHack.getActiveFragments(fragmentManager) == null) return;
 
         mSupport.getSupportDelegate().mPopMultipleNoAnim = true;
         fragmentManager.popBackStack(fragmentTag, flag);
@@ -509,7 +505,7 @@ class TransactionDelegate {
         mHandler.post(new Runnable() {
             @Override
             public void run() {
-                FragmentTransactionBugFixHack.reorderIndices(fragmentManager);
+                FragmentationHack.reorderIndices(fragmentManager);
             }
         });
     }

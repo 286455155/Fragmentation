@@ -9,6 +9,10 @@ import me.yokeyword.fragmentation.anim.FragmentAnimator;
  */
 
 public interface ISupportActivity {
+    SupportActivityDelegate getSupportDelegate();
+
+    SupportTransaction supportTransaction();
+
     FragmentAnimator getFragmentAnimator();
 
     void setFragmentAnimator(FragmentAnimator fragmentAnimator);
@@ -22,7 +26,7 @@ public interface ISupportActivity {
     boolean dispatchTouchEvent(MotionEvent ev);
 
     /**
-     * 加载根Fragment, 即Activity内的第一个Fragment 或 Fragment内的第一个子Fragment
+     * Load root fragment, and push to back stack.
      *
      * @param containerId 容器id
      * @param toFragment  目标Fragment
@@ -30,9 +34,11 @@ public interface ISupportActivity {
     void loadRootFragment(int containerId, SupportFragment toFragment);
 
     /**
-     * 以replace方式加载根Fragment
+     * Load root fragment.
+     * @param addToBackStack push to back stack
+     * @param allowAnimation allow show animation
      */
-    void replaceLoadRootFragment(int containerId, SupportFragment toFragment);
+    void loadRootFragment(int containerId, SupportFragment toFragment, boolean addToBackStack, boolean allowAnimation);
 
     /**
      * 加载多个根Fragment
@@ -84,27 +90,7 @@ public interface ISupportActivity {
      */
     void popTo(Class<?> targetFragmentClass, boolean includeTargetFragment);
 
-    /**
-     * 出栈到目标fragment
-     *
-     * @param targetFragmentTag   目标fragment的tag
-     * @param includeTargetFragment 是否包含该fragment
-     */
-    void popTo(String targetFragmentTag, boolean includeTargetFragment);
-
     void popTo(Class<?> targetFragmentClass, boolean includeTargetFragment, Runnable afterPopTransactionRunnable);
 
-    void popTo(String targetFragmentTag, boolean includeTargetFragment, Runnable afterPopTransactionRunnable);
-
-    /**
-     * 出栈到目标fragment
-     *
-     * @param targetFragmentClass   目标fragment
-     * @param includeTargetFragment 是否包含该fragment
-     */
     void popTo(Class<?> targetFragmentClass, boolean includeTargetFragment, Runnable afterPopTransactionRunnable, int popAnim);
-
-    void popTo(String targetFragmentTag, boolean includeTargetFragment, Runnable afterPopTransactionRunnable, int popAnim);
-
-    SupportActivityDelegate getSupportDelegate();
 }
