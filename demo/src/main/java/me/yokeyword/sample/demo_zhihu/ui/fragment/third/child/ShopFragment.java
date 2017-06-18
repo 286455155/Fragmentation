@@ -11,7 +11,7 @@ import android.widget.Toast;
 import java.util.ArrayList;
 
 import me.yokeyword.fragmentation.SupportFragment;
-import me.yokeyword.fragmentation.SupportManager;
+import me.yokeyword.fragmentation.SupportHelper;
 import me.yokeyword.sample.R;
 import me.yokeyword.sample.demo_zhihu.base.BaseFragment;
 import me.yokeyword.sample.demo_zhihu.ui.fragment.third.child.child.ContentFragment;
@@ -67,7 +67,7 @@ public class ShopFragment extends BaseFragment {
 
             MenuListFragment menuListFragment = MenuListFragment.newInstance(listMenus);
             loadRootFragment(R.id.fl_list_container, menuListFragment);
-            transaction().replaceLoadRootFragment(R.id.fl_content_container, ContentFragment.newInstance("销量排行"));
+            loadRootFragment(R.id.fl_content_container, ContentFragment.newInstance("销量排行"), false, false);
         }
     }
 
@@ -84,9 +84,11 @@ public class ShopFragment extends BaseFragment {
      * @param fragment
      */
     public void switchContentFragment(ContentFragment fragment) {
-        SupportFragment contentFragment = SupportManager.getInstance().findFragment(getChildFragmentManager(), ContentFragment.class);
+        SupportFragment contentFragment = SupportHelper.getInstance().findFragment(getChildFragmentManager(), ContentFragment.class);
         if (contentFragment != null) {
-            contentFragment.replaceFragment(fragment, false);
+            contentFragment.supportTransaction()
+                    .dontAddToBackStack()
+                    .replace(fragment);
         }
     }
 }

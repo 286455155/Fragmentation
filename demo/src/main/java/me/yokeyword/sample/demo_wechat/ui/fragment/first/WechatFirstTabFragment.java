@@ -163,7 +163,6 @@ public class WechatFirstTabFragment extends BaseMainFragment implements SwipeRef
     @Override
     public void onDestroyView() {
         super.onDestroyView();
-        mRecy.setAdapter(null);
         EventBus.getDefault().unregister(this);
     }
 }
